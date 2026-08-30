@@ -16,7 +16,7 @@ DATA_FILE = 'data.json'
 
 # ================= 구글 드라이브 설정 =================
 # 본인의 구글 드라이브 폴더 ID를 여기에 입력하세요.
-GOOGLE_DRIVE_FOLDER_ID = '여기에_구글_드라이브_폴더_ID_입력'
+GOOGLE_DRIVE_FOLDER_ID = '1capKURBOv5TpP0DgNvagP8VQYfnLlBtl'
 
 GOOGLE_CREDENTIALS_PATH = os.environ.get('GOOGLE_CREDENTIALS_PATH', '/etc/secrets/google_creds.json')
 if not os.path.exists(GOOGLE_CREDENTIALS_PATH):
