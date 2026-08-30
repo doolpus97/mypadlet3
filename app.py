@@ -54,7 +54,7 @@ def get_drive_service():
 def index():
     return render_template('index.html')
 
-# 1. 파일 업로드 및 구글 드라이브 연동 (수정된 로직 적용)
+# 1. 구글 드라이브 강제 업로드 API
 @app.route('/upload', methods=['POST'])
 def upload_files():
     files = request.files.getlist('files')
@@ -77,34 +77,48 @@ def upload_files():
             url = None
             if drive_service:
                 try:
-                    file_metadata = {'name': save_name}
-                    if folder_id:
-                        file_metadata['parents'] = [folder_id]
-                        
+                    # 메타데이터에 parents를 명시하여 공유된 폴더 안으로 직접 생성 시도
+                    file_metadata = {
+                        'name': save_name,
+                        'parents': [folder_id] if folder_id else []
+                    }
+                    
                     media = MediaFileUpload(filepath, resumable=True)
                     drive_file = drive_service.files().create(
                         body=file_metadata, 
                         media_body=media, 
-                        fields='id, webContentLink, webViewLink'
+                        fields='id, webContentLink, webViewLink, owners'
                     ).execute()
                     
+                    file_id = drive_file.get('id')
+                    print(f"[Drive Debug] Created file ID in Drive: {file_id}")
+                    
+                    # 외부 공개 읽기 권한 부여
                     drive_service.permissions().create(
-                        fileId=drive_file.get('id'),
+                        fileId=file_id,
                         body={'type': 'anyone', 'role': 'reader'}
                     ).execute()
                     
+                    # 드라이브 웹 링크 가져오기
                     url = drive_file.get('webViewLink') or drive_file.get('webContentLink')
                     print(f"[Drive Debug] Successfully uploaded to Drive: {url}")
-                    if os.path.exists(filepath):
-                        os.remove(filepath)
+                    
                 except Exception as e:
                     print(f"[Drive Debug] Upload Exception Error: {e}")
             
-            if not url:
-                print(f"[Drive Debug] Fallback to local storage for {save_name}")
-                url = f"/static/uploads/{save_name}"
-                
-            uploaded_urls.append(url)
+            # 로컬 임시파일은 업로드 직후 삭제 (서버 용량 절약)
+            if os.path.exists(filepath):
+                try:
+                    os.remove(filepath)
+                except Exception:
+                    pass
+            
+            if url:
+                uploaded_urls.append(url)
+            else:
+                # 드라이브 업로드 실패 시 예외 처리용 (로컬 경로 반환)
+                print(f"[Drive Debug] Warning: Failed to upload to Google Drive, using fallback.")
+                uploaded_urls.append(f"/static/uploads/{save_name}")
 
     return jsonify({'success': True, 'urls': uploaded_urls})
 
