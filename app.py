@@ -1,285 +1,165 @@
 import os
-import time
-import json
-from flask import Flask, render_template, request, jsonify, session, redirect, url_for
-from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import Flow
+import random
+import string
+from flask import Flask, render_template, request, jsonify
+from google.oauth2 import service_account
 from googleapiclient.discovery import build
-from googleapiclient.http import MediaFileUpload
+from googleapiclient.http import MediaIoBaseUpload
+import io
 
 app = Flask(__name__)
-# 세션 유지를 위한 시크릿 키 설정
-app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'mypadlet_secure_secret_key_123')
 
-# HTTPS 환경 (Render 등)에서 OAuth 리디렉션을 위한 설정
-os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
+# ==========================================
+# Google Drive API 설정 (필요 시 파일 업로드용)
+# ==========================================
+# SERVICE_ACCOUNT_FILE = 'credentials.json'  # 서비스 계정 키 파일 경로
+# FOLDER_ID = 'YOUR_GOOGLE_DRIVE_FOLDER_ID' # 구글 드라이브 폴더 ID
 
-UPLOAD_FOLDER = os.path.join('static', 'uploads')
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-
-DATA_FILE = 'data.json'
-
-# ================= 구글 드라이브 설정 =================
-GOOGLE_DRIVE_FOLDER_ID = '1capKURBOv5TpP0DgNvagP8VQYfnLlBtl'
-SCOPES = ['https://www.googleapis.com/auth/drive.file']
-
-def load_data():
-    if os.path.exists(DATA_FILE):
-        try:
-            with open(DATA_FILE, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except Exception:
-            pass
-    return {"users": {}, "boards": [], "posts": {}}
-
-def save_data(data):
-    with open(DATA_FILE, 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-
-db = load_data()
-
-def get_oauth_client_config():
-    """Render 환경 변수에서 OAuth 클라이언트 정보를 불러옵니다."""
-    client_id = os.environ.get('GOOGLE_CLIENT_ID')
-    client_secret = os.environ.get('GOOGLE_CLIENT_SECRET')
-    if not client_id or not client_secret:
-        return None
-    return {
-        "web": {
-            "client_id": client_id,
-            "client_secret": client_secret,
-            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-            "token_uri": "https://oauth2.googleapis.com/token",
-        }
+# ==========================================
+# 인메모리 데이터 저장소 (테스트 및 기본 구조)
+# 실무 적용 시 DB(SQLite, PostgreSQL 등)로 대체 권장
+# ==========================================
+teachers = {}  # { teacher_id: teacher_pw }
+boards = [
+    # 기본 예시 게시판
+    {
+        "title": "기본 게시판",
+        "code": "1234",
+        "teacherId": "admin"
     }
+]
+posts = []    # [{ boardTitle, section, author, title, content, imgs }, ...]
 
+# ------------------------------------------
+# 라우트: 메인 페이지
+# ------------------------------------------
 @app.route('/')
 def index():
     return render_template('index.html')
 
-# ================= 구글 개인 계정 인증(OAuth) 라우트 =================
-@app.route('/auth/google')
-def google_auth():
-    client_config = get_oauth_client_config()
-    if not client_config:
-        return "Google Client ID 또는 Secret 환경 변수가 설정되지 않았습니다.", 500
-    
-    flow = Flow.from_client_config(
-        client_config,
-        scopes=SCOPES,
-        redirect_uri=url_for('google_callback', _external=True)
-    )
-    authorization_url, state = flow.authorization_url(
-        access_type='offline',
-        include_granted_scopes='true',
-        prompt='consent'
-    )
-    session['oauth_state'] = state
-    return redirect(authorization_url)
-
-@app.route('/auth/google/callback')
-def google_callback():
-    state = session.get('oauth_state')
-    client_config = get_oauth_client_config()
-    
-    flow = Flow.from_client_config(
-        client_config,
-        scopes=SCOPES,
-        state=state,
-        redirect_uri=url_for('google_callback', _external=True)
-    )
-    flow.fetch_token(authorization_response=request.url)
-    credentials = flow.credentials
-    
-    # 인증된 크레덴셜 정보를 세션에 저장
-    session['credentials'] = {
-        'token': credentials.token,
-        'refresh_token': credentials.refresh_token,
-        'token_uri': credentials.token_uri,
-        'client_id': credentials.client_id,
-        'client_secret': credentials.client_secret,
-        'scopes': credentials.scopes
-    }
-    return redirect('/')
-
-# ================= 파일 업로드 및 구글 드라이브 연동 =================
-@app.route('/upload', methods=['POST'])
-def upload_files():
-    files = request.files.getlist('files')
-    uploaded_urls = []
-    
-    creds_dict = session.get('credentials')
-    drive_service = None
-    
-    if creds_dict:
-        try:
-            creds = Credentials(**creds_dict)
-            drive_service = build('drive', 'v3', credentials=creds)
-        except Exception as e:
-            print(f"[Drive Auth Error] {e}")
-
-    for file in files:
-        if file and file.filename != '':
-            ext = os.path.splitext(file.filename)[1]
-            if not ext: 
-                ext = '.png'
-            
-            save_name = f"{int(time.time() * 1000)}_{os.urandom(4).hex()}{ext}"
-            filepath = os.path.join(app.config['UPLOAD_FOLDER'], save_name)
-            file.save(filepath)
-            
-            url = None
-            if drive_service:
-                try:
-                    file_metadata = {
-                        'name': save_name,
-                        'parents': [GOOGLE_DRIVE_FOLDER_ID] if GOOGLE_DRIVE_FOLDER_ID else []
-                    }
-                    media = MediaFileUpload(filepath, resumable=True)
-                    drive_file = drive_service.files().create(
-                        body=file_metadata,
-                        media_body=media,
-                        fields='id, webContentLink, webViewLink'
-                    ).execute()
-                    
-                    file_id = drive_file.get('id')
-                    
-                    # 외부 공개 권한 부여 (누구나 이미지 접근 가능하게 설정)
-                    drive_service.permissions().create(
-                        fileId=file_id,
-                        body={'type': 'anyone', 'role': 'reader'}
-                    ).execute()
-                    
-                    # 웹에서 즉시 표시되는 구글 드라이브 이미지 직링크로 변환
-                    if file_id:
-                        url = f"https://lh3.googleusercontent.com/d/{file_id}"
-                    else:
-                        url = drive_file.get('webViewLink')
-                except Exception as e:
-                    print(f"[Drive Upload Error] {e}")
-            
-            # 로컬 임시파일 삭제
-            if os.path.exists(filepath):
-                try:
-                    os.remove(filepath)
-                except Exception:
-                    pass
-            
-            if url:
-                uploaded_urls.append(url)
-            else:
-                uploaded_urls.append(f"/static/uploads/{save_name}")
-
-    return jsonify({'success': True, 'urls': uploaded_urls})
-
-# ================= 게시판 및 인증 API =================
+# ------------------------------------------
+# API: 교사 회원가입 & 로그인
+# ------------------------------------------
 @app.route('/api/signup/teacher', methods=['POST'])
 def signup_teacher():
-    data = request.json or {}
-    teacher_id = data.get('teacherId', '').strip()
-    teacher_pw = data.get('teacherPw', '').strip()
-    
-    if not teacher_id or not teacher_pw:
-        return jsonify({'success': False, 'message': '아이디와 비밀번호를 모두 입력하세요.'}), 400
-        
-    users = db.setdefault('users', {})
-    if teacher_id in users:
-        return jsonify({'success': False, 'message': '이미 존재하는 교사 아이디입니다.'}), 400
-        
-    users[teacher_id] = teacher_pw
-    save_data(db)
-    return jsonify({'success': True, 'message': '회원가입이 완료되었습니다!'})
+    data = request.get_json()
+    t_id = data.get('teacherId')
+    t_pw = data.get('teacherPw')
+
+    if not t_id or not t_pw:
+        return jsonify({"success": False, "message": "아이디와 비밀번호를 입력하세요."}), 400
+
+    if t_id in teachers:
+        return jsonify({"success": False, "message": "이미 존재하는 아이디입니다."}), 400
+
+    teachers[t_id] = t_pw
+    return jsonify({"success": True, "message": "교사 회원가입이 완료되었습니다."})
+
 
 @app.route('/api/login/teacher', methods=['POST'])
 def login_teacher():
-    data = request.json or {}
-    teacher_id = data.get('teacherId', '').strip()
-    teacher_pw = data.get('teacherPw', '').strip()
-    
-    if not teacher_id or not teacher_pw:
-        return jsonify({'success': False, 'message': '아이디와 비밀번호를 모두 입력하세요.'}), 400
-        
-    users = db.setdefault('users', {})
-    if teacher_id in users:
-        if users[teacher_id] == teacher_pw:
-            return jsonify({'success': True, 'teacherId': teacher_id})
-        else:
-            return jsonify({'success': False, 'message': '비밀번호가 일치하지 않습니다.'}), 401
-    else:
-        return jsonify({'success': False, 'message': '존재하지 않는 아이디입니다.'}), 404
+    data = request.get_json()
+    t_id = data.get('teacherId')
+    t_pw = data.get('teacherPw')
 
-@app.route('/api/boards', methods=['GET'])
-def get_boards():
-    teacher_id = request.args.get('teacherId', '').strip()
-    boards = db.get('boards', [])
-    if teacher_id:
-        user_boards = [b for b in boards if b.get('owner') == teacher_id]
-        return jsonify({'success': True, 'boards': user_boards})
-    return jsonify({'success': True, 'boards': boards})
+    if teachers.get(t_id) == t_pw:
+        return jsonify({"success": True, "message": "로그인 성공"})
+    else:
+        return jsonify({"success": False, "message": "아이디 또는 비밀번호가 일치하지 않습니다."}), 401
+
+# ------------------------------------------
+# API: 게시판 관리 (생성 및 조회)
+# ------------------------------------------
+@app.route('/api/boards', methods=['GET', 'POST'])
+def handle_boards():
+    if request.method == 'POST':
+        # 새 게시판 생성
+        data = request.get_json()
+        title = data.get('title')
+        code = data.get('code')
+        teacher_id = data.get('teacherId')
+
+        if not title or not code:
+            return jsonify({"success": False, "message": "게시판 제목과 코드가 필요합니다."}), 400
+
+        # 중복 코드 방지 처리
+        while any(b['code'] == code for b in boards):
+            code = str(random.randint(1000, 9999))
+
+        new_board = {
+            "title": title,
+            "code": code,
+            "teacherId": teacher_id
+        }
+        boards.append(new_board)
+        return jsonify({"success": True, "board": new_board})
+
+    else:
+        # 교사의 게시판 목록 조회
+        teacher_id = request.args.get('teacherId')
+        if teacher_id:
+            user_boards = [b for b in boards if b.get('teacherId') == teacher_id]
+            return jsonify({"success": True, "boards": user_boards})
+        return jsonify({"success": True, "boards": boards})
+
 
 @app.route('/api/boards/by_code', methods=['GET'])
 def get_board_by_code():
-    code = request.args.get('code', '').strip()
-    boards = db.get('boards', [])
-    board = next((b for b in boards if str(b.get('code')).strip() == code), None)
-    
-    if board:
-        return jsonify({'success': True, 'board': board})
-    return jsonify({'success': False, 'message': '입장 코드가 올바르지 않습니다.'}), 404
+    # 학생 4자리 코드로 게시판 검색
+    code = request.args.get('code')
+    found_board = next((b for b in boards if b.get('code') == code), None)
 
-@app.route('/api/boards', methods=['POST'])
-def create_board():
-    data = request.json or {}
-    title = data.get('title', '').strip()
-    code = data.get('code', '').strip()
-    teacher_id = data.get('teacherId', '').strip()
-    
-    if not title or not code:
-        return jsonify({'success': False, 'message': '제목과 코드를 입력하세요.'}), 400
-        
-    boards = db.setdefault('boards', [])
-    new_board = {
-        'id': f"board_{int(time.time()*1000)}",
-        'title': title,
-        'code': code,
-        'owner': teacher_id
-    }
-    boards.append(new_board)
-    save_data(db)
-    return jsonify({'success': True, 'board': new_board})
+    if found_board:
+        return jsonify({"success": True, "board": found_board})
+    else:
+        return jsonify({"success": False, "message": "존재하지 않는 입장 코드입니다."}), 440
 
-@app.route('/api/posts', methods=['GET'])
-def get_posts():
-    board_title = request.args.get('boardTitle', '').strip()
-    posts_dict = db.get('posts', {})
-    posts = posts_dict.get(board_title, [])
-    return jsonify({'success': True, 'posts': posts})
+# ------------------------------------------
+# API: 게시물 관리 (목록 조회 및 등록)
+# ------------------------------------------
+@app.route('/api/posts', methods=['GET', 'POST'])
+def handle_posts():
+    if request.method == 'POST':
+        data = request.get_json()
+        board_title = data.get('boardTitle')
+        section = data.get('section')
+        author = data.get('author')
+        title = data.get('title')
+        content = data.get('content')
+        imgs = data.get('imgs', [])
 
-@app.route('/api/posts', methods=['POST'])
-def add_post():
-    data = request.json or {}
-    board_title = data.get('boardTitle', '').strip()
-    if not board_title:
-        return jsonify({'success': False, 'message': '게시판 정보를 찾을 수 없습니다.'}), 400
-        
-    posts_dict = db.setdefault('posts', {})
-    posts = posts_dict.setdefault(board_title, [])
-        
-    post = {
-        'postId': f"post_{int(time.time()*1000)}",
-        'section': data.get('section', '모둠 1'),
-        'author': data.get('author'),
-        'title': data.get('title', ''),
-        'content': data.get('content', ''),
-        'imgs': data.get('imgs', []),
-        'attachedFiles': [],
-        'comments': []
-    }
-    posts.insert(0, post)
-    save_data(db)
-    return jsonify({'success': True, 'post': post})
+        new_post = {
+            "boardTitle": board_title,
+            "section": section,
+            "author": author,
+            "title": title,
+            "content": content,
+            "imgs": imgs
+        }
+        posts.append(new_post)
+        return jsonify({"success": True, "post": new_post})
+
+    else:
+        board_title = request.args.get('boardTitle')
+        board_posts = [p for p in posts if p.get('boardTitle') == board_title]
+        return jsonify({"success": True, "posts": board_posts})
+
+# ------------------------------------------
+# API: 파일 업로드 (기본 구조)
+# ------------------------------------------
+@app.route('/upload', methods=['POST'])
+def upload_file():
+    uploaded_files = request.files.getlist('files')
+    file_urls = []
+
+    # 구글 드라이브 연동 또는 서버 로컬 저장 처리
+    for file in uploaded_files:
+        if file.filename != '':
+            # 로컬 임시 저장 예시 (구글 드라이브 API 연동 시 해당 로직 작성)
+            # file_urls.append(google_drive_upload(file))
+            pass
+
+    return jsonify({"success": True, "urls": file_urls})
 
 if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host='0.0.0.0', port=port, debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=True)
