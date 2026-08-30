@@ -145,13 +145,17 @@ def upload_files():
                     
                     file_id = drive_file.get('id')
                     
-                    # 외부 공개 권한 부여
+                    # 외부 공개 권한 부여 (누구나 이미지 접근 가능하게 설정)
                     drive_service.permissions().create(
                         fileId=file_id,
                         body={'type': 'anyone', 'role': 'reader'}
                     ).execute()
                     
-                    url = drive_file.get('webViewLink') or drive_file.get('webContentLink')
+                    # 웹에서 즉시 표시되는 구글 드라이브 이미지 직링크로 변환
+                    if file_id:
+                        url = f"https://lh3.googleusercontent.com/d/{file_id}"
+                    else:
+                        url = drive_file.get('webViewLink')
                 except Exception as e:
                     print(f"[Drive Upload Error] {e}")
             
@@ -210,7 +214,6 @@ def get_boards():
     teacher_id = request.args.get('teacherId', '').strip()
     boards = db.get('boards', [])
     if teacher_id:
-        # [수정 완료] 괄호 오류가 수정된 부분입니다.
         user_boards = [b for b in boards if b.get('owner') == teacher_id]
         return jsonify({'success': True, 'boards': user_boards})
     return jsonify({'success': True, 'boards': boards})
