@@ -190,7 +190,7 @@ def create_board():
     }
     boards.append(new_board)
     save_data(db)
-        return jsonify({'success': True, 'board': new_board})
+    return jsonify({'success': True, 'board': new_board})
 
 # 7. 게시글(포스트잇) 조회
 @app.route('/api/posts', methods=['GET'])
