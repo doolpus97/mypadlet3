@@ -12,7 +12,7 @@ app = Flask(__name__)
 app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'mypadlet_secure_secret_key_123')
 
 # HTTPS 환경 (Render 등)에서 OAuth 리디렉션을 위한 설정
-os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'  # 배포 환경이 HTTPS라면 제거해도 무방합니다.
+os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 
 UPLOAD_FOLDER = os.path.join('static', 'uploads')
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -162,7 +162,6 @@ def upload_files():
                 except Exception:
                     pass
             
-            # 드라이브 업로드 실패 시 로그인 유도 또는 로컬 백업 연결
             if url:
                 uploaded_urls.append(url)
             else:
@@ -211,7 +210,8 @@ def get_boards():
     teacher_id = request.args.get('teacherId', '').strip()
     boards = db.get('boards', [])
     if teacher_id:
-        user_boards = [b for b in boards if b.get('owner'] == teacher_id]
+        # [수정 완료] 괄호 오류가 수정된 부분입니다.
+        user_boards = [b for b in boards if b.get('owner') == teacher_id]
         return jsonify({'success': True, 'boards': user_boards})
     return jsonify({'success': True, 'boards': boards})
 
