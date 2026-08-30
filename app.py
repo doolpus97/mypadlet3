@@ -48,20 +48,22 @@ db = load_data()
 def get_drive_service():
     try:
         if GOOGLE_CREDENTIALS_PATH and os.path.exists(GOOGLE_CREDENTIALS_PATH):
+            print(f"[Drive Debug] Using credentials file from: {GOOGLE_CREDENTIALS_PATH}")
             SCOPES = ['https://www.googleapis.com/auth/drive.file']
             creds = service_account.Credentials.from_service_account_file(
                 GOOGLE_CREDENTIALS_PATH, scopes=SCOPES
             )
             return build('drive', 'v3', credentials=creds)
+        else:
+            print("[Drive Debug] Credentials file NOT found in any path!")
     except Exception as e:
-        print(f"Google Drive Authentication Error: {e}")
+        print(f"[Drive Debug] Authentication Exception: {e}")
     return None
 
 @app.route('/')
 def index():
     return render_template('index.html')
 
-# 1. 파일 업로드 및 구글 드라이브 연동
 @app.route('/upload', methods=['POST'])
 def upload_files():
     files = request.files.getlist('files')
@@ -69,6 +71,7 @@ def upload_files():
     
     drive_service = get_drive_service()
     folder_id = GOOGLE_DRIVE_FOLDER_ID
+    print(f"[Drive Debug] Drive Service Available: {drive_service is not None}, Folder ID: {folder_id}")
 
     for file in files:
         if file and file.filename != '':
@@ -97,19 +100,20 @@ def upload_files():
                     ).execute()
                     
                     url = drive_file.get('webViewLink') or drive_file.get('webContentLink')
+                    print(f"[Drive Debug] Successfully uploaded to Drive: {url}")
                     if os.path.exists(filepath):
                         os.remove(filepath)
                 except Exception as e:
-                    print(f"Google Drive Upload Error: {e}")
+                    print(f"[Drive Debug] Upload Exception Error: {e}")
             
             if not url:
+                print(f"[Drive Debug] Fallback to local storage for {save_name}")
                 url = f"/static/uploads/{save_name}"
                 
             uploaded_urls.append(url)
 
     return jsonify({'success': True, 'urls': uploaded_urls})
 
-# 2. 교사 회원가입 API
 @app.route('/api/signup/teacher', methods=['POST'])
 def signup_teacher():
     data = request.json or {}
@@ -127,7 +131,6 @@ def signup_teacher():
     save_data(db)
     return jsonify({'success': True, 'message': '회원가입이 완료되었습니다!'})
 
-# 3. 교사 로그인 API
 @app.route('/api/login/teacher', methods=['POST'])
 def login_teacher():
     data = request.json or {}
@@ -146,7 +149,6 @@ def login_teacher():
     else:
         return jsonify({'success': False, 'message': '존재하지 않는 아이디입니다. 회원가입을 먼저 진행해주세요.'}), 404
 
-# 4. 전체 게시판 목록 조회
 @app.route('/api/boards', methods=['GET'])
 def get_boards():
     teacher_id = request.args.get('teacherId', '').strip()
@@ -156,7 +158,6 @@ def get_boards():
         return jsonify({'success': True, 'boards': user_boards})
     return jsonify({'success': True, 'boards': boards})
 
-# 5. 입장 코드로 게시판 조회 (학생 접속용)
 @app.route('/api/boards/by_code', methods=['GET'])
 def get_board_by_code():
     code = request.args.get('code', '').strip()
@@ -167,7 +168,6 @@ def get_board_by_code():
         return jsonify({'success': True, 'board': board})
     return jsonify({'success': False, 'message': '입장 코드가 올바르지 않거나 등록된 게시판이 없습니다.'}), 404
 
-# 6. 새 게시판 생성
 @app.route('/api/boards', methods=['POST'])
 def create_board():
     data = request.json or {}
@@ -192,7 +192,6 @@ def create_board():
     save_data(db)
     return jsonify({'success': True, 'board': new_board})
 
-# 7. 게시글(포스트잇) 조회
 @app.route('/api/posts', methods=['GET'])
 def get_posts():
     board_title = request.args.get('boardTitle', '').strip()
@@ -200,7 +199,6 @@ def get_posts():
     posts = posts_dict.get(board_title, [])
     return jsonify({'success': True, 'posts': posts})
 
-# 8. 게시글 작성
 @app.route('/api/posts', methods=['POST'])
 def add_post():
     data = request.json or {}
