@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MyPadlet 3</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .board-column { min-width: 280px; max-width: 320px; background: #f8f9fa; border-radius: 8px; padding: 12px; }
+        .post-card { background: white; border-radius: 6px; padding: 12px; margin-bottom: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .preview-img { max-width: 100%; height: auto; border-radius: 4px; margin-top: 5px; }
+    </style>
+</head>
+<body class="bg-light">
+
+<nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-3">
+    <div class="container-fluid">
+        <span class="navbar-brand fw-bold" id="boardTitleDisplay">MyPadlet</span>
+        <div>
+            <span id="userInfo" class="text-white me-3"></span>
+            <button class="btn btn-outline-light btn-sm" onclick="showLoginModal()">교사 로그인</button>
+        </div>
+    </div>
+</nav>
+
+<div class="container-fluid px-4">
+    <!-- 섹션 및 게시글 등록 버튼 -->
+    <div class="d-flex justify-content-between mb-3">
+        <button class="btn btn-success fw-bold" onclick="showPostModal()">＋ 새 게시물 작성</button>
+    </div>
+
+    <!-- 패들렛 섹션 레이아웃 -->
+    <div class="d-flex gap-3 overflow-auto pb-4" id="boardContainer">
+        <!-- JS로 섹션 및 게시물이 동적으로 추가됩니다 -->
+    </div>
+</div>
+
+<!-- 게시물 작성 모달 -->
+<div class="modal fade" id="postModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">새 게시물 작성</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="postForm">
+                    <div class="mb-2">
+                        <label class="form-label small fw-bold">작성자</label>
+                        <input type="text" id="postAuthor" class="form-control" required>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small fw-bold">제목</label>
+                        <input type="text" id="postTitle" class="form-control" required>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small fw-bold">내용</label>
+                        <textarea id="postContent" class="form-control" rows="3"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">파일/사진 첨부 (구글 드라이브 자동 저장)</label>
+                        <input type="file" id="postFiles" class="form-control" multiple>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">취소</button>
+                <button type="button" class="btn btn-primary" onclick="submitPost()">게시하기</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 교사 로그인 모달 -->
+<div class="modal fade" id="loginModal" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">교사 로그인</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="text" id="teacherId" class="form-control mb-2" placeholder="아이디">
+                <input type="password" id="teacherPw" class="form-control mb-2" placeholder="비밀번호">
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary w-100" onclick="loginTeacher()">로그인</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    let currentBoardTitle = "나의 장래 희망"; // 기본 게시판 제목
+    let postModal, loginModal;
+
+    document.addEventListener("DOMContentLoaded", function() {
+        postModal = new bootstrap.Modal(document.getElementById('postModal'));
+        loginModal = new bootstrap.Modal(document.getElementById('loginModal'));
+        loadPosts();
+    });
+
+    function showPostModal() { postModal.show(); }
+    function showLoginModal() { loginModal.show(); }
+
+    // 게시물 불러오기
+    async function loadPosts() {
+        const res = await fetch(`/api/posts?boardTitle=${encodeURIComponent(currentBoardTitle)}`);
+        const data = await res.json();
+        renderBoard(data.posts || []);
+    }
+
+    // 게시판 데이터 화면에 그리기
+    function renderBoard(posts) {
+        const container = document.getElementById('boardContainer');
+        container.innerHTML = '';
+
+        const sectionDiv = document.createElement('div');
+        sectionDiv.className = 'board-column';
+        sectionDiv.innerHTML = `<h5 class="fw-bold mb-3">전체 게시물</h5>`;
+
+        posts.forEach(p => {
+            let filesHtml = '';
+            
+            // 이미지 표시
+            if (p.imgs && p.imgs.length > 0) {
+                p.imgs.forEach(url => {
+                    filesHtml += `<img src="${url}" class="preview-img mb-1" />`;
+                });
+            }
+            
+            // 첨부파일 링크 표시 (구글 드라이브 다운로드 링크 등)
+            if (p.attachedFiles && p.attachedFiles.length > 0) {
+                p.attachedFiles.forEach(f => {
+                    filesHtml += `<div class="mt-1"><a href="${f.url}" target="_blank" class="btn btn-sm btn-outline-secondary w-100 text-truncate">📎 ${f.name}</a></div>`;
+                });
+            }
+
+            const postCard = document.createElement('div');
+            postCard.className = 'post-card';
+            postCard.innerHTML = `
+                <div class="fw-bold">${p.title}</div>
+                <div class="text-muted small mb-1">${p.author}</div>
+                <div>${p.content}</div>
+                ${filesHtml}
+            `;
+            sectionDiv.appendChild(postCard);
+        });
+
+        container.appendChild(sectionDiv);
+    }
+
+    // 파일 업로드 후 게시물 추가
+    async function submitPost() {
+        const author = document.getElementById('postAuthor').value.trim();
+        const title = document.getElementById('postTitle').value.trim();
+        const content = document.getElementById('postContent').value.trim();
+        const fileInput = document.getElementById('postFiles');
+
+        if (!author || !title) {
+            alert('작성자와 제목을 입력하세요.');
+            return;
+        }
+
+        let uploadedImgs = [];
+        let uploadedFiles = [];
+
+        // 1. 파일이 첨부된 경우 백엔드 /upload 로 전송 (구글 드라이브 업로드 처리)
+        if (fileInput.files.length > 0) {
+            const formData = new FormData();
+            for (let i = 0; i < fileInput.files.length; i++) {
+                formData.append('files', fileInput.files[i]);
+            }
+
+            try {
+                const uploadRes = await fetch('/upload', { method: 'POST', body: formData });
+                const uploadData = await uploadRes.json();
+                
+                uploadedImgs = uploadData.urls || [];
+                uploadedFiles = uploadData.files || [];
+            } catch (err) {
+                alert('파일 업로드 실패');
+                return;
+            }
+        }
+
+        // 2. 게시글 등록 API 호출
+        const postData = {
+            boardTitle: currentBoardTitle,
+            author: author,
+            title: title,
+            content: content,
+            imgs: uploadedImgs,
+            attachedFiles: uploadedFiles
+        };
+
+        const res = await fetch('/api/posts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(postData)
+        });
+
+        if (res.ok) {
+            postModal.hide();
+            document.getElementById('postForm').reset();
+            loadPosts();
+        } else {
+            alert('게시글 저장에 실패했습니다.');
+        }
+    }
+
+    // 교사 로그인
+    async function loginTeacher() {
+        const id = document.getElementById('teacherId').value.trim();
+        const pw = document.getElementById('teacherPw').value.trim();
+
+        const res = await fetch('/api/login/teacher', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ teacherId: id, teacherPw: pw })
+        });
+
+        const data = await res.json();
+        if (data.success) {
+            document.getElementById('userInfo').innerText = `교사: ${data.teacherId}`;
+            loginModal.hide();
+        } else {
+            alert(data.message || '로그인 실패');
+        }
+    }
+</script>
+</body>
+</html>
