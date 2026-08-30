@@ -6,317 +6,251 @@
     <title>우리반 학급 게시판</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        body {
-            background-color: #f4f6f9;
-            font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
-        }
-        .login-card {
-            max-width: 450px;
-            margin: 80px auto;
-            background: white;
-            border-radius: 20px;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.05);
-            padding: 40px 30px;
-        }
-        .nav-tabs .nav-link {
-            border: none;
-            color: #888;
-            font-weight: 600;
-            font-size: 1.1rem;
-            padding-bottom: 12px;
-        }
-        .nav-tabs .nav-link.active {
-            color: #2b78e4;
-            border-bottom: 3px solid #2b78e4;
-            background: transparent;
-        }
-        .form-control-custom {
-            background-color: #eef7ff;
-            border: none;
-            height: 50px;
-            border-radius: 10px;
-            font-size: 1rem;
-        }
-        .btn-custom {
-            background-color: #3182ce;
-            border: none;
-            height: 50px;
-            border-radius: 10px;
-            font-size: 1.1rem;
-            font-weight: bold;
-        }
-        .btn-custom:hover {
-            background-color: #2b6cb0;
-        }
-        .board-column { min-width: 300px; max-width: 320px; background: #ebedf0; border-radius: 12px; padding: 15px; }
-        .post-card { background: white; border-radius: 10px; padding: 15px; margin-bottom: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
-        .preview-img { max-width: 100%; border-radius: 8px; margin-top: 8px; }
+        body { background-color: #f8f9fa; font-family: 'Pretendard', sans-serif; }
+        .login-box { max-width: 400px; margin: 100px auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+        .board-column { min-width: 300px; background: #eaedf0; border-radius: 10px; padding: 15px; height: fit-content; }
+        .post-card { background: #fffdf0; border-radius: 8px; padding: 15px; margin-bottom: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); border: 1px solid #f1e0a5; }
+        .preview-img { max-width: 100%; border-radius: 6px; margin-top: 8px; }
     </style>
 </head>
 <body>
 
-<!-- 로그인 / 입장 화면 -->
+<!-- 로그인 화면 -->
 <div id="loginSection" class="container">
-    <div class="login-card text-center">
-        <h2 class="fw-bold mb-2" style="color: #1a202c;">우리반 학급 게시판</h2>
-        <p class="text-muted mb-4">학생 또는 교사로 로그인하세요.</p>
-
-        <ul class="nav nav-tabs nav-fill mb-4" id="loginTab" role="tablist">
-            <li class="nav-item" role="presentation">
-                <button class="nav-link active" id="student-tab" data-bs-toggle="tab" data-bs-target="#student" type="button">학생 입장</button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="teacher-tab" data-bs-toggle="tab" data-bs-target="#teacher" type="button">교사 로그인</button>
-            </li>
+    <div class="login-box text-center">
+        <h3 class="fw-bold mb-4">우리반 학급 게시판</h3>
+        <ul class="nav nav-pills nav-fill mb-3" id="loginTab">
+            <li class="nav-item"><button class="nav-link active" onclick="switchTab('student')">학생 로그인</button></li>
+            <li class="nav-item"><button class="nav-link" onclick="switchTab('teacher')">교사 로그인</button></li>
         </ul>
-
-        <div class="tab-content" id="loginTabContent">
-            <!-- 학생 입장 탭 -->
-            <div class="tab-pane fade show active text-start" id="student">
-                <div class="mb-3">
-                    <label class="form-label fw-bold small text-secondary">4자리 입장 코드</label>
-                    <input type="text" id="entryCode" class="form-control form-control-custom" placeholder="••••">
-                </div>
-                <div class="mb-4">
-                    <label class="form-label fw-bold small text-secondary">학생 이름</label>
-                    <input type="text" id="studentName" class="form-control form-control-custom" placeholder="학생">
-                </div>
-                <button class="btn btn-primary w-100 btn-custom" onclick="enterAsStudent()">게시판 입장하기</button>
+        <div id="studentForm">
+            <div class="mb-3 text-start">
+                <label class="form-label small fw-bold">학생 이름</label>
+                <input type="text" id="studentNameInput" class="form-control" placeholder="이름 입력">
             </div>
-
-            <!-- 교사 로그인 탭 -->
-            <div class="tab-pane fade text-start" id="teacher">
-                <div class="mb-3">
-                    <label class="form-label fw-bold small text-secondary">교사 아이디</label>
-                    <input type="text" id="teacherId" class="form-control form-control-custom" placeholder="아이디 입력">
-                </div>
-                <div class="mb-4">
-                    <label class="form-label fw-bold small text-secondary">비밀번호</label>
-                    <input type="password" id="teacherPw" class="form-control form-control-custom" placeholder="비밀번호 입력">
-                </div>
-                <button class="btn btn-primary w-100 btn-custom" onclick="loginTeacher()">교사 로그인</button>
+            <button class="btn btn-primary w-100" onclick="login('student')">입장하기</button>
+        </div>
+        <div id="teacherForm" class="d-none">
+            <div class="mb-3 text-start">
+                <label class="form-label small fw-bold">교사 아이디</label>
+                <input type="text" id="teacherIdInput" class="form-control" placeholder="아이디">
             </div>
+            <div class="mb-3 text-start">
+                <label class="form-label small fw-bold">비밀번호</label>
+                <input type="password" id="teacherPwInput" class="form-control" placeholder="비밀번호">
+            </div>
+            <button class="btn btn-primary w-100" onclick="login('teacher')">로그인</button>
         </div>
     </div>
 </div>
 
 <!-- 게시판 메인 화면 -->
 <div id="boardSection" class="container-fluid px-4 py-3 d-none">
-    <nav class="navbar navbar-light bg-white rounded-3 shadow-sm mb-4 px-3">
-        <span class="navbar-brand fw-bold" id="boardTitleDisplay">우리반 학급 게시판</span>
-        <div>
-            <span id="userInfoDisplay" class="fw-bold me-3 text-secondary"></span>
-            <button class="btn btn-success me-2 fw-bold" onclick="showPostModal()">＋ 새 게시물 작성</button>
-            <button class="btn btn-outline-danger btn-sm" onclick="logout()">나가기</button>
-        </div>
-    </nav>
+    <div class="bg-primary text-white p-3 rounded mb-3 d-flex justify-content-between align-items-center">
+        <h5 id="welcomeMsg" class="mb-0 fw-bold">환영합니다!</h5>
+        <button class="btn btn-light btn-sm fw-bold text-danger" onclick="logout()">로그아웃</button>
+    </div>
 
-    <div class="d-flex gap-3 overflow-auto pb-4" id="boardContainer"></div>
-</div>
-
-<!-- 게시물 작성 모달 -->
-<div class="modal fade" id="postModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title fw-bold">새 게시물 작성</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <form id="postForm">
-                    <div class="mb-2">
-                        <label class="form-label small fw-bold">제목</label>
-                        <input type="text" id="postTitle" class="form-control" required>
-                    </div>
-                    <div class="mb-2">
-                        <label class="form-label small fw-bold">내용</label>
-                        <textarea id="postContent" class="form-control" rows="3"></textarea>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label small fw-bold">파일/사진 첨부 (구글 드라이브 저장)</label>
-                        <input type="file" id="postFiles" class="form-control" multiple>
-                    </div>
-                </form>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">취소</button>
-                <button type="button" class="btn btn-primary" onclick="submitPost()">게시하기</button>
-            </div>
+    <!-- 포스트잇 작성 패널 -->
+    <div class="card p-4 mb-4 shadow-sm border-0 bg-white">
+        <div class="mb-3">
+            <label class="form-label fw-bold small text-secondary">게시할 섹션 선택</label>
+            <select id="postSectionSelect" class="form-select">
+                <option value="섹션 1">섹션 1</option>
+                <option value="섹션 2">섹션 2</option>
+                <option value="섹션 3">섹션 3</option>
+                <option value="섹션 4">섹션 4</option>
+                <option value="섹션 5">섹션 5</option>
+                <option value="섹션 6">섹션 6</option>
+            </select>
         </div>
+        <div class="mb-3">
+            <textarea id="postContentInput" class="form-control" rows="3" placeholder="내용을 입력하세요..."></textarea>
+        </div>
+        <div class="mb-3">
+            <input type="file" id="postFileInput" class="form-control" multiple accept="image/*">
+        </div>
+        <button class="btn btn-primary w-100 fw-bold py-2" onclick="submitPost()">포스트잇 게시하기</button>
+    </div>
+
+    <!-- 6개 섹션 컬럼 레이아웃 -->
+    <div class="d-flex gap-3 overflow-auto pb-4" id="boardColumnsContainer">
+        <!-- 동적 생성 -->
     </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-    let currentBoardTitle = "";
-    let currentUser = "";
-    let postModal;
+    let currentUser = null;
 
-    document.addEventListener("DOMContentLoaded", function() {
-        postModal = new bootstrap.Modal(document.getElementById('postModal'));
-    });
-
-    async function enterAsStudent() {
-        const code = document.getElementById('entryCode').value.trim();
-        const name = document.getElementById('studentName').value.trim();
-
-        if (!code || !name) {
-            alert('입장 코드와 학생 이름을 모두 입력하세요.');
-            return;
-        }
-
-        const res = await fetch(`/api/boards/by_code?code=${encodeURIComponent(code)}`);
-        const data = await res.json();
-
-        if (data.success) {
-            currentBoardTitle = data.board.title;
-            currentUser = `${name} (학생)`;
-            showBoardView();
+    function switchTab(type) {
+        if(type === 'student') {
+            document.getElementById('studentForm').classList.remove('d-none');
+            document.getElementById('teacherForm').classList.add('d-none');
+            document.querySelectorAll('#loginTab .nav-link')[0].classList.add('active');
+            document.querySelectorAll('#loginTab .nav-link')[1].classList.remove('active');
         } else {
-            alert(data.message || '입장 코드가 올바르지 않습니다.');
+            document.getElementById('studentForm').classList.add('d-none');
+            document.getElementById('teacherForm').classList.remove('d-none');
+            document.querySelectorAll('#loginTab .nav-link')[0].classList.remove('active');
+            document.querySelectorAll('#loginTab .nav-link')[1].classList.add('active');
         }
     }
 
-    async function loginTeacher() {
-        const id = document.getElementById('teacherId').value.trim();
-        const pw = document.getElementById('teacherPw').value.trim();
-
-        if (!id || !pw) {
-            alert('아이디와 비밀번호를 입력하세요.');
-            return;
+    async function login(type) {
+        let name = '', pw = '';
+        if(type === 'student') {
+            name = document.getElementById('studentNameInput').value.trim();
+            if(!name) { alert('이름을 입력하세요.'); return; }
+        } else {
+            name = document.getElementById('teacherIdInput').value.trim();
+            pw = document.getElementById('teacherPwInput').value.trim();
+            if(!name || !pw) { alert('아이디와 비밀번호를 입력하세요.'); return; }
         }
 
-        const res = await fetch('/api/login/teacher', {
+        const res = await fetch('/api/login', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ teacherId: id, teacherPw: pw })
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ type, name, pw })
         });
-
         const data = await res.json();
-        if (data.success) {
-            currentUser = `${data.teacherId} (교사)`;
-            const boardsRes = await fetch(`/api/boards?teacherId=${encodeURIComponent(id)}`);
-            const boardsData = await boardsRes.json();
-            
-            if (boardsData.boards && boardsData.boards.length > 0) {
-                currentBoardTitle = boardsData.boards[0].title;
-            } else {
-                currentBoardTitle = "우리반 학급 게시판";
-            }
-            showBoardView();
-        } else {
-            alert(data.message || '로그인 실패');
-        }
-    }
 
-    function showBoardView() {
-        document.getElementById('loginSection').classList.add('d-none');
-        document.getElementById('boardSection').classList.remove('d-none');
-        document.getElementById('boardTitleDisplay').innerText = currentBoardTitle;
-        document.getElementById('userInfoDisplay').innerText = currentUser;
-        loadPosts();
+        if(data.success) {
+            currentUser = data;
+            document.getElementById('loginSection').classList.add('d-none');
+            document.getElementById('boardSection').classList.remove('d-none');
+            document.getElementById('welcomeMsg').innerText = `[${data.type === 'student' ? '학생' : '교사'}] ${data.name}님 환영합니다! ✨`;
+            loadPosts();
+        } else {
+            alert(data.message);
+        }
     }
 
     function logout() {
+        currentUser = null;
         document.getElementById('boardSection').classList.add('d-none');
         document.getElementById('loginSection').classList.remove('d-none');
     }
 
-    function showPostModal() { postModal.show(); }
-
     async function loadPosts() {
-        const res = await fetch(`/api/posts?boardTitle=${encodeURIComponent(currentBoardTitle)}`);
+        const res = await fetch('/api/posts');
         const data = await res.json();
         renderBoard(data.posts || []);
     }
 
     function renderBoard(posts) {
-        const container = document.getElementById('boardContainer');
+        const container = document.getElementById('boardColumnsContainer');
         container.innerHTML = '';
 
-        const sectionDiv = document.createElement('div');
-        sectionDiv.className = 'board-column';
-        sectionDiv.innerHTML = `<h5 class="fw-bold mb-3">전체 게시물</h5>`;
+        const sections = ['섹션 1', '섹션 2', '섹션 3', '섹션 4', '섹션 5', '섹션 6'];
 
-        posts.forEach(p => {
-            let filesHtml = '';
-            if (p.imgs && p.imgs.length > 0) {
-                p.imgs.forEach(url => {
-                    filesHtml += `<img src="${url}" class="preview-img mb-1" />`;
+        sections.forEach(secName => {
+            const colDiv = document.createElement('div');
+            colDiv.className = 'board-column';
+            colDiv.innerHTML = `<h5 class="fw-bold mb-3 text-dark">${secName}</h5>`;
+
+            const secPosts = posts.filter(p => p.section === secName);
+            if(secPosts.length === 0) {
+                colDiv.innerHTML += `<div class="text-muted small text-center py-4">등록된 포스트잇이 없습니다.</div>`;
+            } else {
+                secPosts.forEach(p => {
+                    let imgHtml = '';
+                    if(p.images && p.images.length > 0) {
+                        p.images.forEach(url => {
+                            imgHtml += `<img src="${url}" class="preview-img" />`;
+                        });
+                    }
+
+                    let commentsHtml = '';
+                    if(p.comments && p.comments.length > 0) {
+                        p.comments.forEach(c => {
+                            commentsHtml += `<div class="bg-light p-1 rounded small mb-1"><b>${c.author}:</b> ${c.text}</div>`;
+                        });
+                    }
+
+                    const card = document.createElement('div');
+                    card.className = 'post-card';
+                    card.innerHTML = `
+                        <div class="fw-bold small text-secondary mb-1">👤 ${p.author}</div>
+                        <div class="mb-2" style="white-space: pre-wrap;">${p.content}</div>
+                        ${imgHtml}
+                        <hr class="my-2">
+                        <div class="comments-container mb-2">${commentsHtml}</div>
+                        <div class="input-group input-group-sm">
+                            <input type="text" class="form-control" id="comment-input-${p.id}" placeholder="댓글을 입력하세요...">
+                            <button class="btn btn-outline-primary" onclick="addComment('${p.id}')">등록</button>
+                        </div>
+                    `;
+                    colDiv.appendChild(card);
                 });
             }
-            if (p.attachedFiles && p.attachedFiles.length > 0) {
-                p.attachedFiles.forEach(f => {
-                    filesHtml += `<div class="mt-1"><a href="${f.url}" target="_blank" class="btn btn-sm btn-outline-primary w-100 text-truncate">📎 ${f.name}</a></div>`;
-                });
-            }
-
-            const postCard = document.createElement('div');
-            postCard.className = 'post-card';
-            postCard.innerHTML = `
-                <div class="fw-bold fs-5">${p.title}</div>
-                <div class="text-muted small mb-2">${p.author}</div>
-                <div class="mb-2">${p.content}</div>
-                ${filesHtml}
-            `;
-            sectionDiv.appendChild(postCard);
+            container.appendChild(colDiv);
         });
-
-        container.appendChild(sectionDiv);
     }
 
     async function submitPost() {
-        const title = document.getElementById('postTitle').value.trim();
-        const content = document.getElementById('postContent').value.trim();
-        const fileInput = document.getElementById('postFiles');
+        const section = document.getElementById('postSectionSelect').value;
+        const content = document.getElementById('postContentInput').value.trim();
+        const fileInput = document.getElementById('postFileInput');
 
-        if (!title) {
-            alert('제목을 입력하세요.');
+        if(!content && fileInput.files.length === 0) {
+            alert('내용이나 사진을 입력해주세요.');
             return;
         }
 
-        let uploadedImgs = [];
-        let uploadedFiles = [];
-
-        if (fileInput.files.length > 0) {
+        let imageUrls = [];
+        if(fileInput.files.length > 0) {
             const formData = new FormData();
-            for (let i = 0; i < fileInput.files.length; i++) {
+            for(let i=0; i<fileInput.files.length; i++) {
                 formData.append('files', fileInput.files[i]);
             }
 
             try {
-                const uploadRes = await fetch('/upload', { method: 'POST', body: formData });
+                const uploadRes = await fileInput.files.length > 0 ? await fetch('/upload', { method: 'POST', body: formData }) : null;
                 const uploadData = await uploadRes.json();
-                
-                uploadedImgs = uploadData.urls || [];
-                uploadedFiles = uploadData.files || [];
-            } catch (err) {
-                alert('파일 업로드 실패');
+                if(uploadData.success) {
+                    imageUrls = uploadData.urls;
+                }
+            } catch(e) {
+                alert('구글 드라이브 파일 업로드 중 오류가 발생했습니다.');
                 return;
             }
         }
 
-        const postData = {
-            boardTitle: currentBoardTitle,
-            author: currentUser,
-            title: title,
-            content: content,
-            imgs: uploadedImgs,
-            attachedFiles: uploadedFiles
-        };
-
         const res = await fetch('/api/posts', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(postData)
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                section: section,
+                content: content,
+                author: currentUser.name,
+                images: imageUrls
+            })
         });
 
-        if (res.ok) {
-            postModal.hide();
-            document.getElementById('postForm').reset();
+        if(res.ok) {
+            document.getElementById('postContentInput').value = '';
+            document.getElementById('postFileInput').value = '';
             loadPosts();
         } else {
-            alert('게시글 저장 실패');
+            alert('게시 실패');
+        }
+    }
+
+    async function addComment(postId) {
+        const input = document.getElementById(`comment-input-${postId}`);
+        const text = input.value.trim();
+        if(!text) return;
+
+        const res = await fetch(`/api/posts/${postId}/comments`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ comment: text, author: currentUser.name })
+        });
+
+        if(res.ok) {
+            loadPosts();
+        } else {
+            alert('댓글 등록 실패');
         }
     }
 </script>
