@@ -102,7 +102,7 @@
                 <button class="btn btn-primary w-100 btn-custom" onclick="enterAsStudent()">게시판 입장하기</button>
             </div>
 
-            <!-- 교사 로그인 탭 -->
+            <!-- 교사 로그인 탭 (회원가입 버튼 포함) -->
             <div class="tab-pane fade text-start" id="teacher">
                 <div class="mb-3">
                     <label class="form-label fw-bold small text-secondary">교사 아이디</label>
@@ -112,7 +112,8 @@
                     <label class="form-label fw-bold small text-secondary">비밀번호</label>
                     <input type="password" id="teacherPw" class="form-control form-control-custom" placeholder="비밀번호 입력">
                 </div>
-                <button class="btn btn-primary w-100 btn-custom" onclick="loginTeacher()">교사 로그인</button>
+                <button class="btn btn-primary w-100 btn-custom mb-2" onclick="loginTeacher()">교사 로그인</button>
+                <button class="btn btn-outline-secondary w-100 fw-bold" style="height: 45px; border-radius: 10px;" onclick="signupTeacher()">교사 회원가입</button>
             </div>
         </div>
     </div>
@@ -214,11 +215,25 @@
         const data = await res.json();
         if (data.success) {
             currentUser = `[교사] ${id}`;
-            currentBoardTitle = "과일";
+            currentBoardTitle = "기본 게시판";
             loadBoard();
         } else {
             alert(data.message || "로그인 실패");
         }
+    }
+
+    async function signupTeacher() {
+        const id = document.getElementById('teacherId').value.trim();
+        const pw = document.getElementById('teacherPw').value.trim();
+        if (!id || !pw) return alert("가입할 아이디와 비밀번호를 입력하세요.");
+
+        const res = await fetch('/api/signup/teacher', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ teacherId: id, teacherPw: pw })
+        });
+        const data = await res.json();
+        alert(data.message);
     }
 
     function loadBoard() {
@@ -256,7 +271,7 @@
                 let imgsHtml = '';
                 if (p.imgs && p.imgs.length > 0) {
                     p.imgs.forEach(url => {
-                        // 업로드한 구글 드라이브 주소를 이미지 <img> 태그로 직접 표시
+                        // 첨부 파일 열기 링크 대신 사진이 직접 카드 안에 표시되도록 설정
                         imgsHtml += `<a href="${url}" target="_blank"><img src="${url}" class="post-img" alt="첨부 이미지" onerror="this.onerror=null; this.src='https://via.placeholder.com/300x180?text=Image+Loading+Failed';"></a>`;
                     });
                 }
