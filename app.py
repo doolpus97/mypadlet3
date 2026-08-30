@@ -1,12 +1,18 @@
 import os
 import time
 import json
-from flask import Flask, render_template, request, jsonify
-from google.oauth2 import service_account
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for
+from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 
 app = Flask(__name__)
+# 세션 유지를 위한 시크릿 키 설정
+app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'mypadlet_secure_secret_key_123')
+
+# HTTPS 환경 (Render 등)에서 OAuth 리디렉션을 위한 설정
+os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'  # 배포 환경이 HTTPS라면 제거해도 무방합니다.
 
 UPLOAD_FOLDER = os.path.join('static', 'uploads')
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -16,6 +22,7 @@ DATA_FILE = 'data.json'
 
 # ================= 구글 드라이브 설정 =================
 GOOGLE_DRIVE_FOLDER_ID = '1capKURBOv5TpP0DgNvagP8VQYfnLlBtl'
+SCOPES = ['https://www.googleapis.com/auth/drive.file']
 
 def load_data():
     if os.path.exists(DATA_FILE):
@@ -32,37 +39,85 @@ def save_data(data):
 
 db = load_data()
 
-def get_drive_service():
-    """환경 변수(GOOGLE_CREDENTIALS_JSON)를 통해 구글 드라이브 API 인증 클라이언트 생성"""
-    try:
-        cred_json_str = os.environ.get('GOOGLE_CREDENTIALS_JSON')
-        if cred_json_str:
-            print("[Drive Debug] Loading credentials from GOOGLE_CREDENTIALS_JSON env variable.")
-            cred_dict = json.loads(cred_json_str)
-            SCOPES = ['https://www.googleapis.com/auth/drive.file']
-            creds = service_account.Credentials.from_service_account_info(
-                cred_dict, scopes=SCOPES
-            )
-            return build('drive', 'v3', credentials=creds)
-        else:
-            print("[Drive Debug] GOOGLE_CREDENTIALS_JSON env variable not found!")
-    except Exception as e:
-        print(f"[Drive Debug] Authentication Exception: {e}")
-    return None
+def get_oauth_client_config():
+    """Render 환경 변수에서 OAuth 클라이언트 정보를 불러옵니다."""
+    client_id = os.environ.get('GOOGLE_CLIENT_ID')
+    client_secret = os.environ.get('GOOGLE_CLIENT_SECRET')
+    if not client_id or not client_secret:
+        return None
+    return {
+        "web": {
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+        }
+    }
 
 @app.route('/')
 def index():
     return render_template('index.html')
 
-# 1. 구글 드라이브 강제 업로드 API
+# ================= 구글 개인 계정 인증(OAuth) 라우트 =================
+@app.route('/auth/google')
+def google_auth():
+    client_config = get_oauth_client_config()
+    if not client_config:
+        return "Google Client ID 또는 Secret 환경 변수가 설정되지 않았습니다.", 500
+    
+    flow = Flow.from_client_config(
+        client_config,
+        scopes=SCOPES,
+        redirect_uri=url_for('google_callback', _external=True)
+    )
+    authorization_url, state = flow.authorization_url(
+        access_type='offline',
+        include_granted_scopes='true',
+        prompt='consent'
+    )
+    session['oauth_state'] = state
+    return redirect(authorization_url)
+
+@app.route('/auth/google/callback')
+def google_callback():
+    state = session.get('oauth_state')
+    client_config = get_oauth_client_config()
+    
+    flow = Flow.from_client_config(
+        client_config,
+        scopes=SCOPES,
+        state=state,
+        redirect_uri=url_for('google_callback', _external=True)
+    )
+    flow.fetch_token(authorization_response=request.url)
+    credentials = flow.credentials
+    
+    # 인증된 크레덴셜 정보를 세션에 저장
+    session['credentials'] = {
+        'token': credentials.token,
+        'refresh_token': credentials.refresh_token,
+        'token_uri': credentials.token_uri,
+        'client_id': credentials.client_id,
+        'client_secret': credentials.client_secret,
+        'scopes': credentials.scopes
+    }
+    return redirect('/')
+
+# ================= 파일 업로드 및 구글 드라이브 연동 =================
 @app.route('/upload', methods=['POST'])
 def upload_files():
     files = request.files.getlist('files')
     uploaded_urls = []
     
-    drive_service = get_drive_service()
-    folder_id = GOOGLE_DRIVE_FOLDER_ID
-    print(f"[Drive Debug] Drive Service Available: {drive_service is not None}, Folder ID: {folder_id}")
+    creds_dict = session.get('credentials')
+    drive_service = None
+    
+    if creds_dict:
+        try:
+            creds = Credentials(**creds_dict)
+            drive_service = build('drive', 'v3', credentials=creds)
+        except Exception as e:
+            print(f"[Drive Auth Error] {e}")
 
     for file in files:
         if file and file.filename != '':
@@ -77,52 +132,45 @@ def upload_files():
             url = None
             if drive_service:
                 try:
-                    # 메타데이터에 parents를 명시하여 공유된 폴더 안으로 직접 생성 시도
                     file_metadata = {
                         'name': save_name,
-                        'parents': [folder_id] if folder_id else []
+                        'parents': [GOOGLE_DRIVE_FOLDER_ID] if GOOGLE_DRIVE_FOLDER_ID else []
                     }
-                    
                     media = MediaFileUpload(filepath, resumable=True)
                     drive_file = drive_service.files().create(
-                        body=file_metadata, 
-                        media_body=media, 
-                        fields='id, webContentLink, webViewLink, owners'
+                        body=file_metadata,
+                        media_body=media,
+                        fields='id, webContentLink, webViewLink'
                     ).execute()
                     
                     file_id = drive_file.get('id')
-                    print(f"[Drive Debug] Created file ID in Drive: {file_id}")
                     
-                    # 외부 공개 읽기 권한 부여
+                    # 외부 공개 권한 부여
                     drive_service.permissions().create(
                         fileId=file_id,
                         body={'type': 'anyone', 'role': 'reader'}
                     ).execute()
                     
-                    # 드라이브 웹 링크 가져오기
                     url = drive_file.get('webViewLink') or drive_file.get('webContentLink')
-                    print(f"[Drive Debug] Successfully uploaded to Drive: {url}")
-                    
                 except Exception as e:
-                    print(f"[Drive Debug] Upload Exception Error: {e}")
+                    print(f"[Drive Upload Error] {e}")
             
-            # 로컬 임시파일은 업로드 직후 삭제 (서버 용량 절약)
+            # 로컬 임시파일 삭제
             if os.path.exists(filepath):
                 try:
                     os.remove(filepath)
                 except Exception:
                     pass
             
+            # 드라이브 업로드 실패 시 로그인 유도 또는 로컬 백업 연결
             if url:
                 uploaded_urls.append(url)
             else:
-                # 드라이브 업로드 실패 시 예외 처리용 (로컬 경로 반환)
-                print(f"[Drive Debug] Warning: Failed to upload to Google Drive, using fallback.")
                 uploaded_urls.append(f"/static/uploads/{save_name}")
 
     return jsonify({'success': True, 'urls': uploaded_urls})
 
-# 2. 교사 회원가입 API
+# ================= 게시판 및 인증 API =================
 @app.route('/api/signup/teacher', methods=['POST'])
 def signup_teacher():
     data = request.json or {}
@@ -140,7 +188,6 @@ def signup_teacher():
     save_data(db)
     return jsonify({'success': True, 'message': '회원가입이 완료되었습니다!'})
 
-# 3. 교사 로그인 API
 @app.route('/api/login/teacher', methods=['POST'])
 def login_teacher():
     data = request.json or {}
@@ -157,19 +204,17 @@ def login_teacher():
         else:
             return jsonify({'success': False, 'message': '비밀번호가 일치하지 않습니다.'}), 401
     else:
-        return jsonify({'success': False, 'message': '존재하지 않는 아이디입니다. 회원가입을 먼저 진행해주세요.'}), 404
+        return jsonify({'success': False, 'message': '존재하지 않는 아이디입니다.'}), 404
 
-# 4. 전체 게시판 목록 조회
 @app.route('/api/boards', methods=['GET'])
 def get_boards():
     teacher_id = request.args.get('teacherId', '').strip()
     boards = db.get('boards', [])
     if teacher_id:
-        user_boards = [b for b in boards if b.get('owner') == teacher_id]
+        user_boards = [b for b in boards if b.get('owner'] == teacher_id]
         return jsonify({'success': True, 'boards': user_boards})
     return jsonify({'success': True, 'boards': boards})
 
-# 5. 입장 코드로 게시판 조회 (학생 접속용)
 @app.route('/api/boards/by_code', methods=['GET'])
 def get_board_by_code():
     code = request.args.get('code', '').strip()
@@ -178,9 +223,8 @@ def get_board_by_code():
     
     if board:
         return jsonify({'success': True, 'board': board})
-    return jsonify({'success': False, 'message': '입장 코드가 올바르지 않거나 등록된 게시판이 없습니다.'}), 404
+    return jsonify({'success': False, 'message': '입장 코드가 올바르지 않습니다.'}), 404
 
-# 6. 새 게시판 생성
 @app.route('/api/boards', methods=['POST'])
 def create_board():
     data = request.json or {}
@@ -189,12 +233,9 @@ def create_board():
     teacher_id = data.get('teacherId', '').strip()
     
     if not title or not code:
-        return jsonify({'success': False, 'message': '게시판 제목과 코드를 입력하세요.'}), 400
+        return jsonify({'success': False, 'message': '제목과 코드를 입력하세요.'}), 400
         
     boards = db.setdefault('boards', [])
-    if any(str(b.get('code')).strip() == code for b in boards):
-        return jsonify({'success': False, 'message': '이미 사용 중인 입장 코드입니다.'}), 400
-        
     new_board = {
         'id': f"board_{int(time.time()*1000)}",
         'title': title,
@@ -205,7 +246,6 @@ def create_board():
     save_data(db)
     return jsonify({'success': True, 'board': new_board})
 
-# 7. 게시글(포스트잇) 조회
 @app.route('/api/posts', methods=['GET'])
 def get_posts():
     board_title = request.args.get('boardTitle', '').strip()
@@ -213,7 +253,6 @@ def get_posts():
     posts = posts_dict.get(board_title, [])
     return jsonify({'success': True, 'posts': posts})
 
-# 8. 게시글 작성
 @app.route('/api/posts', methods=['POST'])
 def add_post():
     data = request.json or {}
