@@ -54,7 +54,7 @@ def get_drive_service():
 def index():
     return render_template('index.html')
 
-# 1. 파일 업로드 및 구글 드라이브 연동
+# 1. 파일 업로드 및 구글 드라이브 연동 (수정된 로직 적용)
 @app.route('/upload', methods=['POST'])
 def upload_files():
     files = request.files.getlist('files')
@@ -75,9 +75,12 @@ def upload_files():
             file.save(filepath)
             
             url = None
-            if drive_service and folder_id:
+            if drive_service:
                 try:
-                    file_metadata = {'name': save_name, 'parents': [folder_id]}
+                    file_metadata = {'name': save_name}
+                    if folder_id:
+                        file_metadata['parents'] = [folder_id]
+                        
                     media = MediaFileUpload(filepath, resumable=True)
                     drive_file = drive_service.files().create(
                         body=file_metadata, 
